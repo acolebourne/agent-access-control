@@ -3,9 +3,11 @@ import uk.gov.hmrc.SbtAutoBuildPlugin
 import uk.gov.hmrc.sbtdistributables.SbtDistributablesPlugin
 import uk.gov.hmrc.versioning.SbtGitVersioning
 
+import scala.util.Properties._
+
 object MicroServiceBuild extends Build with MicroService {
 
-  val appName = "agent-access-control"
+  override val appName = "agent-access-control"
 
   override lazy val plugins: Seq[Plugins] = Seq(
     SbtAutoBuildPlugin, SbtGitVersioning, SbtDistributablesPlugin
