@@ -39,14 +39,17 @@ object MicroserviceAuthConnector extends AuthConnector with ServicesConfig {
 }
 
 
-object ComponentRegistry {
-
-  val authorisationService: AuthorisationService = new AuthorisationService()
+trait ServiceRegistry {
   val auditService: AuditService.type = AuditService
+  val authorisationService: AuthorisationService = new AuthorisationService()
+}
 
-  private val controllers = Map[Class[_], Controller](
+trait ControllerRegistry {
+  registry:ServiceRegistry =>
+
+  private lazy val controllers = Map[Class[_], Controller](
     classOf[AuthorisationController] -> new AuthorisationController(auditService, authorisationService)
   )
 
-  def getController[A](controllerClass: Class[A]) : A = controllers.get(controllerClass).asInstanceOf[A]
+  def getController[A](controllerClass: Class[A]) : A = controllers(controllerClass).asInstanceOf[A]
 }

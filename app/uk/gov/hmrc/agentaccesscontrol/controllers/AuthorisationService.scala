@@ -18,9 +18,6 @@ package uk.gov.hmrc.agentaccesscontrol.controllers
 
 import scala.concurrent.Future
 
-/**
-  * Created by ben on 25/05/2016.
-  */
 class AuthorisationService {
 
   def isAuthorised: Future[Boolean] = Future successful false

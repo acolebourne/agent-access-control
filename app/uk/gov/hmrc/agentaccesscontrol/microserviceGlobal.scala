@@ -49,7 +49,7 @@ object MicroserviceAuthFilter extends AuthorisationFilter {
   override def controllerNeedsAuth(controllerName: String): Boolean = ControllerConfiguration.paramsForController(controllerName).needsAuth
 }
 
-object MicroserviceGlobal extends DefaultMicroserviceGlobal with RunMode {
+trait MicroserviceGlobal extends DefaultMicroserviceGlobal with RunMode with ServiceRegistry with ControllerRegistry {
   override val auditConnector = MicroserviceAuditConnector
 
   override def microserviceMetricsConfig(implicit app: Application): Option[Configuration] = app.configuration.getConfig(s"microservice.metrics")
@@ -61,6 +61,8 @@ object MicroserviceGlobal extends DefaultMicroserviceGlobal with RunMode {
   override val authFilter = Some(MicroserviceAuthFilter)
 
   override def getControllerInstance[A](controllerClass: Class[A]): A = {
-    ComponentRegistry.getController(controllerClass)
+    getController(controllerClass)
   }
 }
+
+object MicroserviceGlobal extends MicroserviceGlobal
