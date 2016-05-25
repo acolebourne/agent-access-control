@@ -38,8 +38,6 @@ class AuthorisationController(override val auditService: AuditService, authorisa
   }
 }
 
-object AuthorisationController
-
 trait Audit {
 
   val auditService: AuditService
