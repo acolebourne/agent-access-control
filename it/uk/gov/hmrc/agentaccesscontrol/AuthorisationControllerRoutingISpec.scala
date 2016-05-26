@@ -22,13 +22,11 @@ import play.api.test.Helpers._
 import play.api.test.{FakeApplication, FakeRequest}
 import play.mvc.Http.Status
 import uk.gov.hmrc.agentaccesscontrol.controllers.AuthorisationService
-import uk.gov.hmrc.agentaccesscontrol.model.EmpRef
-import uk.gov.hmrc.domain.AgentCode
 
 import scala.concurrent.Future
 
 
-class AuthorisationControllerISpec extends fixture.WordSpecLike with Matchers with MixedFixtures {
+class AuthorisationControllerRoutingISpec extends fixture.WordSpecLike with Matchers with MixedFixtures {
 
   val suppressAuthFilterConfiguration: Map[String, Boolean] = Map(
     "controllers.uk.gov.hmrc.agentaccesscontrol.controllers.AuthorisationController.needsAuth" -> false
@@ -46,7 +44,7 @@ class AuthorisationControllerISpec extends fixture.WordSpecLike with Matchers wi
       additionalConfiguration = suppressAuthFilterConfiguration,
       withGlobal = Some(new TestMicroserviceGlobal(false))
     )) {
-      val Some(result) = route(FakeRequest(controllers.routes.AuthorisationController.isAuthorised(AgentCode("AGENTCODE"), EmpRef("000", "A1B2C4D5"))))
+      val Some(result) = route(FakeRequest(GET, "/agent-access-control/sa-auth/agent/AGENTCODE/client/000%2FA1B2CD45"))
       status(result) shouldBe Status.UNAUTHORIZED
     }
 
@@ -55,9 +53,7 @@ class AuthorisationControllerISpec extends fixture.WordSpecLike with Matchers wi
       additionalConfiguration = suppressAuthFilterConfiguration,
       withGlobal = Some(new TestMicroserviceGlobal(true))
     )) {
-      // TODO decide whether to test using the reverse router or by explicitly passing in a fixed URL
-      //      val Some(result) = route(FakeRequest(GET, "/sa-auth/agent/AGENTCODE/client/000%2F12345"))
-      val Some(result) = route(FakeRequest(controllers.routes.AuthorisationController.isAuthorised(AgentCode("AGENTCODE"), EmpRef("000", "A1B2C4D5"))))
+      val Some(result) = route(FakeRequest(GET, "/agent-access-control/sa-auth/agent/AGENTCODE/client/000%2FA1B2CD45"))
       status(result) shouldBe Status.OK
     }
   }
