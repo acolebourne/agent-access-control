@@ -33,14 +33,21 @@ class AuthConnector(baseUrl: URL, httpGet: HttpGet) {
       .flatMap(enrolments)
       .map(toSaAgentReference)
 
-  private def toSaAgentReference(enrolments: Enrolments): Option[SaAgentReference] =
-    enrolments.saAgentReferenceOption
+  private def toSaAgentReference(enrolments: Option[Enrolments]): Option[SaAgentReference] =
+    enrolments.flatMap(_.saAgentReferenceOption)
 
-  private def currentAuthority()(implicit hc: HeaderCarrier, ec: ExecutionContext): Future[JsValue] =
-    httpGetAs[JsValue]("/auth/authority")
+  private def currentAuthority()(implicit hc: HeaderCarrier, ec: ExecutionContext): Future[Option[JsValue]] =
+    toFutureOfOption(hc.userId.map(userId => httpGetAs[JsValue](userId.value)))
 
-  private def enrolments(authorityJson: JsValue)(implicit hc: HeaderCarrier, ec: ExecutionContext): Future[Enrolments] =
-    httpGetAs[Set[AuthEnrolment]](enrolmentsRelativeUrl(authorityJson)).map(Enrolments(_))
+  private def enrolments(maybeAuthorityJson: Option[JsValue])(implicit hc: HeaderCarrier, ec: ExecutionContext): Future[Option[Enrolments]] =
+    toFutureOfOption(maybeAuthorityJson.map { authorityJson =>
+      httpGetAs[Set[AuthEnrolment]](enrolmentsRelativeUrl(authorityJson)).map(Enrolments(_))
+    })
+
+  private def toFutureOfOption[A](option: Option[Future[A]])(implicit ec: ExecutionContext): Future[Option[A]] = option match {
+    case None => Future.successful(None)
+    case Some(a) => a map(Some(_))
+  }
 
   private def enrolmentsRelativeUrl(authorityJson: JsValue) = (authorityJson \ "enrolments").as[String]
 

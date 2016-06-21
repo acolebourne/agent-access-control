@@ -19,15 +19,13 @@ package uk.gov.hmrc.agentaccesscontrol.support
 import com.github.tomakehurst.wiremock.client.WireMock._
 import org.scalatestplus.play.OneServerPerSuite
 import uk.gov.hmrc.agentaccesscontrol.StartAndStopWireMock
-import uk.gov.hmrc.play.http.HeaderCarrier
+import uk.gov.hmrc.play.http.{HeaderCarrier, UserId}
 import uk.gov.hmrc.play.test.UnitSpec
 
 abstract class BaseISpec extends UnitSpec
     with StartAndStopWireMock
     with StubUtils
-    with OneServerPerSuite {
-  implicit val hc = HeaderCarrier()
-}
+    with OneServerPerSuite
 
 trait StubUtils {
   me: StartAndStopWireMock =>
@@ -72,8 +70,7 @@ trait StubUtils {
     def isLoggedIn(): AgentAdmin = {
 //      stubFor(get(urlPathEqualTo(s"/authorise/read/agent/$agentCode")).willReturn(aResponse().withStatus(200)))
 //      stubFor(get(urlPathEqualTo(s"/authorise/write/agent/$agentCode")).willReturn(aResponse().withStatus(200)))
-      stubFor(get(urlPathEqualTo(s"/auth/authority")).willReturn(aResponse().withStatus(200).withBody(
-        s"""
+      val authorityJson = s"""
            |{
            |  "new-session":"/auth/oid/$oid/session",
            |  "enrolments":"/auth/oid/$oid/enrolments",
@@ -104,9 +101,18 @@ trait StubUtils {
            |  "previouslyLoggedInAt":"2016-06-20T09:48:37.112Z"
            |}
        """.stripMargin
-      )))
+
+      stubFor(get(urlPathEqualTo(s"/auth/authority")).willReturn(aResponse().withStatus(200).withBody( authorityJson)))
+      stubFor(get(urlPathEqualTo(userId)).willReturn(aResponse().withStatus(200).withBody( authorityJson)))
       this
     }
+
+    def userId: String = {
+      s"/auth/oid/$oid"
+    }
+
+    def headerCarrier =
+      HeaderCarrier(userId = Some(UserId(userId)))
   }
 
 
