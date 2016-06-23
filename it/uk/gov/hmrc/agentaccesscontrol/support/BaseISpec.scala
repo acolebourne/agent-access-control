@@ -175,6 +175,7 @@ trait StubUtils {
     }
 
     def isLoggedIn(): A = {
+      stubFor(get(urlPathEqualTo(s"/authorise/read/agent/$agentCode")).willReturn(aResponse().withStatus(200)))
       stubFor(get(urlPathEqualTo(s"/auth/authority")).willReturn(aResponse().withStatus(200).withBody(
         s"""
            |{
