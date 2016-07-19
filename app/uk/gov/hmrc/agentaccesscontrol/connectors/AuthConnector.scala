@@ -33,6 +33,11 @@ class AuthConnector(baseUrl: URL, httpGet: HttpGet) {
       .flatMap(enrolments)
       .map(toSaAgentReference)
 
+  def hasActivatedIrSaEnrolment()(implicit hc: HeaderCarrier, ec: ExecutionContext): Future[Boolean] =
+    currentAuthority
+      .flatMap(enrolments)
+      .map(_.activatedSaEnrolment.isDefined)
+
   private def toSaAgentReference(enrolments: Enrolments): Option[SaAgentReference] =
     enrolments.saAgentReferenceOption
 

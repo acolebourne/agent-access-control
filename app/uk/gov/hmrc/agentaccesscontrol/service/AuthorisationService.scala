@@ -21,7 +21,7 @@ import uk.gov.hmrc.agentaccesscontrol.connectors.AuthConnector
 import uk.gov.hmrc.agentaccesscontrol.connectors.desapi.DesAgentClientApiConnector
 import uk.gov.hmrc.agentaccesscontrol.model.{DesAgentClientFlagsApiResponse, FoundResponse, NotFoundResponse}
 import uk.gov.hmrc.domain.{AgentCode, SaUtr}
-import uk.gov.hmrc.play.http.HeaderCarrier
+import uk.gov.hmrc.play.http.{HeaderCarrier, Upstream4xxResponse}
 
 import scala.concurrent.{ExecutionContext, Future}
 
@@ -36,6 +36,9 @@ class AuthorisationService(desAgentClientApiConnector: DesAgentClientApiConnecto
           .map(handleDesResponse(agentCode, saUtr, _))
       case None =>
         Future successful notAuthorised(s"No 6 digit agent code found for agent $agentCode")
+    } recover {
+      case e: Upstream4xxResponse if e.upstreamResponseCode == 401 =>
+        notAuthorised(s"Got a 401 response from auth: ${e.message}")
     }
 
   private def handleDesResponse(agentCode: AgentCode, saUtr: SaUtr, response: DesAgentClientFlagsApiResponse): Boolean = response match {

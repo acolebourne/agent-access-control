@@ -50,6 +50,9 @@ abstract class BaseISpec extends UnitSpec
 trait StubUtils {
   me: StartAndStopWireMock =>
 
+  val pendingEnrolmentState: String = "Pending"
+  val activatedEnrolmentState: String = "Activated"
+
   class PreconditionBuilder {
     def agentAdmin(agentCode: String): AgentAdmin = {
       new AgentAdmin(agentCode, oid = "556737e15500005500eaf68e")
@@ -132,8 +135,8 @@ trait StubUtils {
     def andHasNoIrSaAgentEnrolment(): A = {
       stubFor(get(urlPathEqualTo(s"/auth/oid/$oid/enrolments")).willReturn(aResponse().withStatus(200).withBody(
         s"""
-           |[{"key":"IR-PAYE-AGENT","identifiers":[{"key":"IrAgentReference","value":"HZ1234"}],"state":"Activated"},
-           | {"key":"HMRC-AGENT-AGENT","identifiers":[{"key":"AgentRefNumber","value":"JARN1234567"}],"state":"Activated"}]
+           |[{"key":"IR-PAYE-AGENT","identifiers":[{"key":"IrAgentReference","value":"HZ1234"}],"state":"$activatedEnrolmentState"},
+           | {"key":"HMRC-AGENT-AGENT","identifiers":[{"key":"AgentRefNumber","value":"JARN1234567"}],"state":"$activatedEnrolmentState"}]
          """.stripMargin
       )))
       this
@@ -151,13 +154,22 @@ trait StubUtils {
     def andHasSaAgentReferenceWithEnrolment(saAgentReference: SaAgentReference): A =
       andHasSaAgentReferenceWithEnrolment(saAgentReference.value)
 
-    def andHasSaAgentReferenceWithEnrolment(ref: String, enrolmentState: String = "Activated"): A = {
+    def andHasSaAgentReferenceWithEnrolment(ref: String, enrolmentState: String = activatedEnrolmentState): A = {
       andHasSaAgentReference(ref)
       stubFor(get(urlPathEqualTo(s"/auth/oid/$oid/enrolments")).willReturn(aResponse().withStatus(200).withBody(
         s"""
-           |[{"key":"IR-PAYE-AGENT","identifiers":[{"key":"IrAgentReference","value":"HZ1234"}],"state":"Activated"},
-           | {"key":"HMRC-AGENT-AGENT","identifiers":[{"key":"AgentRefNumber","value":"JARN1234567"}],"state":"Activated"},
+           |[{"key":"IR-PAYE-AGENT","identifiers":[{"key":"IrAgentReference","value":"HZ1234"}],"state":"$activatedEnrolmentState"},
+           | {"key":"HMRC-AGENT-AGENT","identifiers":[{"key":"AgentRefNumber","value":"JARN1234567"}],"state":"$activatedEnrolmentState"},
            | {"key":"IR-SA-AGENT","identifiers":[{"key":"AnotherIdentifier", "value": "not the IR Agent Reference"}, {"key":"IRAgentReference","value":"$ref"}],"state":"$enrolmentState"}]
+         """.stripMargin
+      )))
+      this
+    }
+
+    def andHasIrSaEnrolment(enrolmentState: String = activatedEnrolmentState): A = {
+      stubFor(get(urlPathEqualTo(s"/auth/oid/$oid/enrolments")).willReturn(aResponse().withStatus(200).withBody(
+        s"""
+           |[{"key":"IR-SA-AGENT","identifiers":[],"state":"$enrolmentState"}]
          """.stripMargin
       )))
       this
@@ -167,7 +179,7 @@ trait StubUtils {
       andHasSaAgentReferenceWithPendingEnrolment(saAgentReference.value)
 
     def andHasSaAgentReferenceWithPendingEnrolment(ref: String): A =
-      andHasSaAgentReferenceWithEnrolment(ref, enrolmentState = "Pending")
+      andHasSaAgentReferenceWithEnrolment(ref, enrolmentState = pendingEnrolmentState)
 
     def isNotLoggedIn(): A = {
       stubFor(get(urlPathEqualTo(s"/auth/authority")).willReturn(aResponse().withStatus(401)))

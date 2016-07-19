@@ -19,16 +19,27 @@ package uk.gov.hmrc.agentaccesscontrol.controllers
 import play.api.Logger
 import play.api.libs.concurrent.Execution.Implicits.defaultContext
 import play.api.mvc.Action
-import uk.gov.hmrc.agentaccesscontrol.audit.AuditService
-import uk.gov.hmrc.agentaccesscontrol.service.AuthorisationService
+import uk.gov.hmrc.agentaccesscontrol.service.SaAgentAuthorisationService
 import uk.gov.hmrc.domain.{AgentCode, SaUtr}
 import uk.gov.hmrc.play.microservice.controller.BaseController
 
+class SaAgentAuthorisationController(saAgentAuthorisationService: SaAgentAuthorisationService) extends BaseController {
 
-class AuthorisationController(override val auditService: AuditService, authorisationService: AuthorisationService) extends BaseController with Audit {
-
+  /**
+    * This implements a delegated auth rule that just checks that the current
+    * user an activated IR-SA-AGENT enrolment.
+    *
+    * It is used to check that the current user is an agent enrolled for SA
+    * without checking that they are associated with any given client.
+    *
+    * Usually you want the sa-auth rule instead, which does check for an
+    * association with a specific client. This auth rule was developed for
+    * use during the agent-client authorisation process, when no agent-client
+    * relationship will usually exist (because the whole point of the process
+    * is to *create* such a relationship).
+    */
   def isAuthorised(agentCode: AgentCode, saUtr: SaUtr) = Action.async { implicit request =>
-    authorisationService.isAuthorised(agentCode, saUtr).map {
+    saAgentAuthorisationService.isAuthorised().map {
       case authorised if authorised => Ok
       case notAuthorised => Unauthorized
     } recover {
@@ -37,9 +48,4 @@ class AuthorisationController(override val auditService: AuditService, authorisa
         Unauthorized
     }
   }
-}
-
-trait Audit {
-
-  val auditService: AuditService
 }

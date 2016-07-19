@@ -34,9 +34,9 @@ object AuthEnrolment {
 
 case class Enrolments(enrolments: Set[AuthEnrolment]) {
 
-  def saAgentReferenceOption: Option[SaAgentReference] = saEnrolment.flatMap(_.identifier("IRAgentReference")).map(SaAgentReference)
+  def saAgentReferenceOption: Option[SaAgentReference] = activatedSaEnrolment.flatMap(_.identifier("IRAgentReference")).map(SaAgentReference)
 
-  private def saEnrolment: Option[AuthEnrolment] = getActivatedEnrolment("IR-SA-AGENT")
+  def activatedSaEnrolment: Option[AuthEnrolment] = getActivatedEnrolment("IR-SA-AGENT")
 
   private def getActivatedEnrolment(key: String): Option[AuthEnrolment] = enrolments.find(e => e.key == key && e.isActivated)
 }

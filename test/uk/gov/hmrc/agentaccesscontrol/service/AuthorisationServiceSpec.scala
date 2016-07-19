@@ -17,13 +17,14 @@
 package uk.gov.hmrc.agentaccesscontrol.service
 
 import org.mockito.Mockito._
+import org.mockito.stubbing.Answer
 import org.scalatest.mock.MockitoSugar
 import play.api.libs.concurrent.Execution.Implicits.defaultContext
 import uk.gov.hmrc.agentaccesscontrol.connectors.AuthConnector
 import uk.gov.hmrc.agentaccesscontrol.connectors.desapi.DesAgentClientApiConnector
 import uk.gov.hmrc.agentaccesscontrol.model.{FoundResponse, NotFoundResponse}
 import uk.gov.hmrc.domain.{AgentCode, SaAgentReference, SaUtr}
-import uk.gov.hmrc.play.http.{BadRequestException, HeaderCarrier}
+import uk.gov.hmrc.play.http.{BadRequestException, HeaderCarrier, Upstream4xxResponse}
 import uk.gov.hmrc.play.test.UnitSpec
 
 import scala.concurrent.Future
@@ -80,6 +81,14 @@ class AuthorisationServiceSpec extends UnitSpec with MockitoSugar {
 
     "return false if SA agent reference cannot be found" in new Context {
       when(mockAuthConnector.currentSaAgentReference()).thenReturn(None)
+
+      await(authorisationService.isAuthorised(agentCode, clientSaUtr)) shouldBe false
+    }
+
+    "return false if auth returns a 401" in new Context {
+      when(mockAuthConnector.currentSaAgentReference()).thenReturn(
+        Future failed Upstream4xxResponse("", 401, 0)
+      )
 
       await(authorisationService.isAuthorised(agentCode, clientSaUtr)) shouldBe false
     }

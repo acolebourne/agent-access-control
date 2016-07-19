@@ -22,8 +22,8 @@ import play.api.mvc.Controller
 import uk.gov.hmrc.agentaccesscontrol.audit.AuditService
 import uk.gov.hmrc.agentaccesscontrol.connectors.{AuthConnector => OurAuthConnector}
 import uk.gov.hmrc.agentaccesscontrol.connectors.desapi.DesAgentClientApiConnector
-import uk.gov.hmrc.agentaccesscontrol.controllers.AuthorisationController
-import uk.gov.hmrc.agentaccesscontrol.service.AuthorisationService
+import uk.gov.hmrc.agentaccesscontrol.controllers.{AuthorisationController, SaAgentAuthorisationController}
+import uk.gov.hmrc.agentaccesscontrol.service.{AuthorisationService, SaAgentAuthorisationService}
 import uk.gov.hmrc.play.audit.http.config.LoadAuditingConfig
 import uk.gov.hmrc.play.audit.http.connector.AuditConnector
 import uk.gov.hmrc.play.auth.microservice.connectors.AuthConnector
@@ -49,13 +49,15 @@ trait ServiceRegistry extends ServicesConfig {
   lazy val desAgentClientApiConnector = new DesAgentClientApiConnector(baseUrl("des"))
   lazy val authConnector = new OurAuthConnector(new URL(baseUrl("auth")), WSHttp)
   lazy val authorisationService: AuthorisationService = new AuthorisationService(desAgentClientApiConnector, authConnector)
+  lazy val saAgentAuthorisationService: SaAgentAuthorisationService = new SaAgentAuthorisationService(authConnector)
 }
 
 trait ControllerRegistry {
   registry: ServiceRegistry =>
 
   private lazy val controllers = Map[Class[_], Controller](
-    classOf[AuthorisationController] -> new AuthorisationController(auditService, authorisationService)
+    classOf[AuthorisationController] -> new AuthorisationController(auditService, authorisationService),
+    classOf[SaAgentAuthorisationController] -> new SaAgentAuthorisationController(saAgentAuthorisationService)
   )
 
   def getController[A](controllerClass: Class[A]) : A = controllers(controllerClass).asInstanceOf[A]
