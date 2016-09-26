@@ -18,8 +18,8 @@ package uk.gov.hmrc.agentaccesscontrol.service
 
 import play.api.libs.concurrent.Execution.Implicits.defaultContext
 import uk.gov.hmrc.agentaccesscontrol.audit.AgentAccessControlEvent.GGW_Decision
-import uk.gov.hmrc.agentaccesscontrol.audit.AuditService
-import uk.gov.hmrc.agentaccesscontrol.connectors.GovernmentGatewayProxyConnector
+import uk.gov.hmrc.agentaccesscontrol.audit.{AuditService, RequestResponseToBeAudited}
+import uk.gov.hmrc.agentaccesscontrol.connectors.{AssignedAgent, GovernmentGatewayProxyConnector}
 import uk.gov.hmrc.domain.{AgentCode, SaUtr}
 import uk.gov.hmrc.play.http.HeaderCarrier
 
@@ -29,8 +29,9 @@ class GovernmentGatewayAuthorisationService(val ggProxyConnector: GovernmentGate
                                             val auditService: AuditService) extends LoggingAuthorisationResults {
 
   def isAuthorisedInGovernmentGateway(agentCode: AgentCode, ggCredentialId: String, saUtr: SaUtr)(implicit hc: HeaderCarrier): Future[Boolean] = {
-    ggProxyConnector.getAssignedSaAgents(saUtr, agentCode) map { assignedAgents =>
-      val result = assignedAgents.exists(_.matches(agentCode, ggCredentialId))
+    ggProxyConnector.getAssignedSaAgents(saUtr, agentCode) map { ggProxyResultsTuple =>
+      val (assignedAgents: Seq[AssignedAgent], _) = ggProxyResultsTuple
+      val result: Boolean = assignedAgents.exists(_.matches(agentCode, ggCredentialId))
       logResult(agentCode, ggCredentialId, saUtr, result)
       result
     }

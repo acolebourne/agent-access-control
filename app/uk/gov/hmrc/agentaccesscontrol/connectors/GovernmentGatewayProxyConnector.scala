@@ -26,9 +26,13 @@ import play.api.http.HeaderNames.CONTENT_TYPE
 import play.api.libs.concurrent.Execution.Implicits.defaultContext
 import uk.gov.hmrc.agent.kenshoo.monitoring.HttpAPIMonitor
 import uk.gov.hmrc.agentaccesscontrol.audit.AgentAccessControlEvent.GGW_Response
-import uk.gov.hmrc.agentaccesscontrol.audit.{AgentAccessControlEvent, AuditService}
+import uk.gov.hmrc.agentaccesscontrol.audit.{AuditService, RequestResponseToBeAudited}
 import uk.gov.hmrc.domain.{AgentCode, SaUtr}
+import uk.gov.hmrc.play.audit.AuditExtensions
+import uk.gov.hmrc.play.audit.EventKeys._
+import uk.gov.hmrc.play.audit.model.DataCall
 import uk.gov.hmrc.play.http.{HeaderCarrier, HttpPost}
+import uk.gov.hmrc.time.DateTimeUtils.now
 
 import scala.concurrent.Future
 import scala.xml.Elem
@@ -46,12 +50,15 @@ case class AssignedCredentials(identifier: String)
 class GovernmentGatewayProxyConnector(baseUrl: URL, httpPost: HttpPost, auditService: AuditService) extends HttpAPIMonitor {
   val url: URL = new URL(baseUrl, "/government-gateway-proxy/api/admin/GsoAdminGetAssignedAgents")
 
-  def getAssignedSaAgents(utr: SaUtr, agentCode: AgentCode)(implicit hc: HeaderCarrier): Future[Seq[AssignedAgent]] = {
+  def getAssignedSaAgents(utr: SaUtr, agentCode: AgentCode)(implicit hc: HeaderCarrier): Future[(Seq[AssignedAgent], RequestResponseToBeAudited)] = {
+    val requestUrl = url.toString
     monitor("ConsumedAPI-GGW-GetAssignedAgents-POST"){
-      httpPost.POSTString(url.toString, body(utr), Seq(CONTENT_TYPE -> XML))
+      val requestGeneratedAt = now
+      httpPost.POSTString(requestUrl, body(utr), Seq(CONTENT_TYPE -> XML))
     }.map({ r =>
-        logResponse(utr, agentCode, r.body)
-        parseResponse(r.body)
+      logResponse(utr, agentCode, r.body)
+      import AuditExtensions._
+      (parseResponse(r.body), RequestResponseToBeAudited(request = DataCall(hc.toAuditTags(requestUrl, requestUrl), hc.toAuditDetails(Path -> requestUrl, Method -> requestUrl), now), null /*TODO*/))
     })
   }
 

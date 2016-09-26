@@ -1,6 +1,6 @@
 package uk.gov.hmrc.agentaccesscontrol.connectors
 
-import java.net.URL
+import java.net.{URI, URL}
 
 import com.kenshoo.play.metrics.MetricsRegistry
 import org.mockito.Matchers
@@ -9,7 +9,7 @@ import org.mockito.Mockito.verify
 import org.scalatest.mock.MockitoSugar
 import uk.gov.hmrc.agentaccesscontrol.WSHttp
 import uk.gov.hmrc.agentaccesscontrol.audit.AgentAccessControlEvent.GGW_Response
-import uk.gov.hmrc.agentaccesscontrol.audit.AuditService
+import uk.gov.hmrc.agentaccesscontrol.audit.{AuditService, RequestResponseToBeAudited}
 import uk.gov.hmrc.agentaccesscontrol.support.BaseISpec
 import uk.gov.hmrc.domain.{AgentCode, SaUtr}
 import uk.gov.hmrc.play.http.{HeaderCarrier, Upstream5xxResponse}
@@ -28,7 +28,7 @@ class GovernmentGatewayProxyConnectorSpec extends BaseISpec with MockitoSugar {
         .agentAdmin("AgentCode", "000000123245678900")
           .andIsAllocatedAndAssignedToClient(SaUtr("1234567890"))
 
-      val allocation = await(connector.getAssignedSaAgents(new SaUtr("1234567890"), agentCode))
+      val (allocation, _) = await(connector.getAssignedSaAgents(new SaUtr("1234567890"), agentCode))
 
       val details: AssignedAgent = allocation.head
       details.allocatedAgentCode shouldBe AgentCode("AgentCode")
@@ -55,7 +55,7 @@ class GovernmentGatewayProxyConnectorSpec extends BaseISpec with MockitoSugar {
         .agentAdmin("AgentCode")
         .andIsNotAllocatedToClient(SaUtr("1234567890"))
 
-      val allocation = await(connector.getAssignedSaAgents(new SaUtr("1234567890"), agentCode))
+      val (allocation, _) = await(connector.getAssignedSaAgents(new SaUtr("1234567890"), agentCode))
 
       allocation shouldBe empty
     }
@@ -75,6 +75,7 @@ class GovernmentGatewayProxyConnectorSpec extends BaseISpec with MockitoSugar {
 
       an[Upstream5xxResponse] should be thrownBy await(connector.getAssignedSaAgents(new SaUtr("1234567890"), agentCode))
     }
+
     "record metrics for outbound call" in {
       val metricsRegistry = MetricsRegistry.defaultRegistry
       given()
@@ -83,6 +84,26 @@ class GovernmentGatewayProxyConnectorSpec extends BaseISpec with MockitoSugar {
 
       await(connector.getAssignedSaAgents(new SaUtr("1234567890"), agentCode))
       metricsRegistry.getTimers().get("Timer-ConsumedAPI-GGW-GetAssignedAgents-POST").getCount should be >= 1L
+    }
+
+    "return auditing info" in {
+      given()
+        .agentAdmin("AgentCode", "000000123245678900")
+          .andIsAllocatedAndAssignedToClient(SaUtr("1234567890"))
+
+      val (allocation: Seq[AssignedAgent], auditInfo: RequestResponseToBeAudited) =
+        await(connector.getAssignedSaAgents(new SaUtr("1234567890"), agentCode))
+
+      // request.detail.path in implicit events is not just the path - it is an absolute URL
+      // we want to include the whole absolute URL in our explicit events to be consistent with implicit events
+      val uri = new URI(auditInfo.request.detail("path"))
+      uri.getScheme should not be empty
+      uri.getHost should not be empty
+      uri.getPath shouldBe "/government-gateway-proxy/api/admin/GsoAdminGetAssignedAgents"
+
+      auditInfo.request.detail("method") shouldBe "POST"
+
+      auditInfo.request.detail("X-Request-ID") should not be empty
     }
   }
 }
