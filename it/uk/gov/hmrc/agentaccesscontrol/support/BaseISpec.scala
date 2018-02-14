@@ -17,17 +17,19 @@
 package uk.gov.hmrc.agentaccesscontrol.support
 
 import com.github.tomakehurst.wiremock.client.WireMock._
+import org.mockito
 import org.mockito.Mockito.verify
 import org.mockito.{ArgumentCaptor, Matchers}
 import org.scalatest.TestData
 import org.scalatest.concurrent.Eventually
+import org.scalatest.concurrent.PatienceConfiguration.Timeout
 import org.scalatest.mock.MockitoSugar
 import org.scalatestplus.play.{OneAppPerSuite, OneServerPerTest}
 import play.api.Application
 import play.api.inject.guice.GuiceApplicationBuilder
 import uk.gov.hmrc.agentaccesscontrol.{StartAndStopWireMock, WSHttp}
 import uk.gov.hmrc.agentmtdidentifiers.model.{Arn, MtdItId, Vrn}
-import uk.gov.hmrc.domain.{AgentCode, EmpRef, Nino, SaUtr, TaxIdentifier, SaAgentReference}
+import uk.gov.hmrc.domain.{AgentCode, EmpRef, Nino, SaAgentReference, SaUtr, TaxIdentifier}
 import uk.gov.hmrc.http.HeaderCarrier
 import uk.gov.hmrc.play.audit.http.connector.AuditConnector
 import uk.gov.hmrc.play.audit.model.MergedDataEvent
@@ -437,6 +439,7 @@ trait StubUtils {
     }
 
     def capturedEvent() = {
+
       // HttpAuditing.AuditingHook does the auditing asynchronously, so we need
       // to use eventually to avoid a race condition in this test
       eventually {

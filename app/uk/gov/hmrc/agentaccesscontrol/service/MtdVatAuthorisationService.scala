@@ -22,6 +22,7 @@ import play.api.mvc.Request
 import uk.gov.hmrc.agentaccesscontrol.audit.{AgentAccessControlEvent, AuditService}
 import uk.gov.hmrc.agentaccesscontrol.connectors.{AuthConnector, AuthDetails}
 import uk.gov.hmrc.agentaccesscontrol.connectors.mtd.RelationshipsConnector
+import uk.gov.hmrc.agentaccesscontrol.model.AuthPostDetails
 import uk.gov.hmrc.agentmtdidentifiers.model.{Arn, Vrn}
 import uk.gov.hmrc.domain.AgentCode
 import uk.gov.hmrc.http.HeaderCarrier
@@ -33,18 +34,21 @@ class MtdVatAuthorisationService @Inject()(authConnector: AuthConnector,
                                            relationshipsConnector: RelationshipsConnector,
                                            auditService: AuditService) extends LoggingAuthorisationResults {
 
-  def authoriseForMtdVat(agentCode: AgentCode, vrn: Vrn)
+  def authoriseForMtdVat(agentCode: AgentCode, vrn: Vrn, authPostDetails: AuthPostDetails)
                        (implicit ec: ExecutionContext, hc: HeaderCarrier, request: Request[_]): Future[Boolean] = {
-    authConnector.currentAuthDetails() flatMap  {
-      case Some(agentAuthDetails@AuthDetails(_, Some(arn), _, _, _)) => hasRelationship(arn, vrn) map { result =>
-        auditDecision(agentCode, agentAuthDetails, vrn, result, "arn" -> arn.value)
-        if (result) authorised(s"Access allowed for agentCode=$agentCode arn=${arn.value} client=${vrn.value}")
-        else notAuthorised(s"Access not allowed for agentCode=$agentCode arn=${arn.value} client=${vrn.value}")
+    authPostDetails match {
+      case AuthPostDetails(_,_, Some(arn), _) => {
+        hasRelationship(Arn(arn), vrn) map { result =>
+          auditDecision(agentCode, authPostDetails, vrn, result, "arn" -> arn)
+          if (result) authorised(s"Access allowed for agentCode=$agentCode arn=${arn} client=${vrn.value}")
+          else notAuthorised(s"Access not allowed for agentCode=$agentCode arn=${arn} client=${vrn.value}")
+        }
       }
-      case Some(agentAuthDetails) =>
-        auditDecision(agentCode, agentAuthDetails, vrn, result = false)
+      case AuthPostDetails(None, None, None, _) => Future successful notAuthorised("No user is logged in")
+      case _ => {
+        auditDecision(agentCode, authPostDetails, vrn, result = false)
         Future successful notAuthorised(s"No ARN found in HMRC-AS-AGENT enrolment for agentCode $agentCode")
-      case None => Future successful notAuthorised("No user is logged in")
+      }
     }
   }
 
@@ -52,7 +56,7 @@ class MtdVatAuthorisationService @Inject()(authConnector: AuthConnector,
     relationshipsConnector.relationshipExists(arn, vrn)
 
   private def auditDecision(
-                             agentCode: AgentCode, agentAuthDetails: AuthDetails, vrn: Vrn,
+                             agentCode: AgentCode, agentAuthDetails: AuthPostDetails, vrn: Vrn,
                              result: Boolean, extraDetails: (String, Any)*)
                            (implicit hc: HeaderCarrier, request: Request[Any]): Future[Unit] = {
 
@@ -62,7 +66,7 @@ class MtdVatAuthorisationService @Inject()(authConnector: AuthConnector,
       agentCode,
       "mtd-vat",
       vrn,
-      Seq("credId" -> agentAuthDetails.ggCredentialId,
+      Seq("credId" -> agentAuthDetails.ggCredentialId.getOrElse(""),
         "accessGranted" -> result)
         ++ extraDetails)
   }

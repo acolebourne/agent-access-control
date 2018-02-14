@@ -16,6 +16,8 @@
 
 package uk.gov.hmrc.agentaccesscontrol.controllers
 
+import akka.actor.ActorSystem
+import akka.stream.{ActorMaterializer, Materializer}
 import org.mockito.Matchers.{eq => eqs, _}
 import org.mockito.Mockito._
 import org.scalatest.BeforeAndAfterEach
@@ -26,6 +28,7 @@ import play.api.mvc.{AnyContent, Request}
 import play.api.test.FakeRequest
 import play.mvc.Http.Status
 import uk.gov.hmrc.agentaccesscontrol.audit.AuditService
+import uk.gov.hmrc.agentaccesscontrol.model.AuthPostDetails
 import uk.gov.hmrc.agentaccesscontrol.service.{AuthorisationService, MtdItAuthorisationService, MtdVatAuthorisationService}
 import uk.gov.hmrc.agentmtdidentifiers.model.{MtdItId, Vrn}
 import uk.gov.hmrc.domain.{AgentCode, EmpRef, Nino, SaUtr}
@@ -42,14 +45,21 @@ class AuthorisationControllerSpec extends UnitSpec with BeforeAndAfterEach with 
   val mtdVatAuthorisationService = mock[MtdVatAuthorisationService]
   def controller(enabled: Boolean = true) = new AuthorisationController(auditService, authorisationService, mtdItAuthorisationService, mtdVatAuthorisationService, Configuration("features.allowPayeAccess" -> enabled))
 
+  private val saAuthPostJson = Json.toJson(Map("ggCredentialId" -> "some-ggId", "saAgentReference" -> "some-saAgentReference"))
+  private val ePayeAuthPostJson = Json.toJson(Map("ggCredentialId" -> "some-ggId"))
+  private val mtdAuthPostJson = Json.toJson(Map("arn" -> "some-arn"))
+
+  implicit val system: ActorSystem = ActorSystem("sys")
+  implicit val materializer: Materializer = ActorMaterializer()
 
   override protected def beforeEach(): Unit = {
     super.beforeEach()
     reset(auditService, authorisationService)
   }
 
+  "POST isAuthorisedForSa" should {
 
-  private def anSaEndpoint(fakeRequest: FakeRequest[_<:AnyContent]) = {
+    val fakeRequest = FakeRequest("POST", "/agent-access-control/sa-auth/agent//client/utr").withBody(saAuthPostJson)
 
     "return 401 if the AuthorisationService doesn't permit access" in {
 
@@ -75,7 +85,7 @@ class AuthorisationControllerSpec extends UnitSpec with BeforeAndAfterEach with 
 
       val response = controller().isAuthorisedForSa(AgentCode(""), SaUtr("utr"))(fakeRequest)
 
-      verify(authorisationService).isAuthorisedForSa(any[AgentCode], any[SaUtr])(any[ExecutionContext], any[HeaderCarrier], eqs(fakeRequest))
+      verify(authorisationService).isAuthorisedForSa(any[AgentCode], any[SaUtr], any[AuthPostDetails])(any[ExecutionContext], any[HeaderCarrier], eqs(fakeRequest))
 
       status(response) shouldBe Status.OK
     }
@@ -89,7 +99,9 @@ class AuthorisationControllerSpec extends UnitSpec with BeforeAndAfterEach with 
 
   }
 
-  private def anMdtitEndpoint(fakeRequest: FakeRequest[_<:AnyContent]) = {
+  "POST isAuthorisedForMtdIt" should {
+    val fakeRequest = FakeRequest("POST", "/agent-access-control/mtd-it-auth/agent//client/utr").withBody(Json.toJson(mtdAuthPostJson))
+
     "return 401 if the MtdAuthorisationService doesn't permit access" in {
 
       whenMtdItAuthorisationServiceIsCalled thenReturn(Future successful false)
@@ -116,9 +128,12 @@ class AuthorisationControllerSpec extends UnitSpec with BeforeAndAfterEach with 
 
       an[IllegalStateException] shouldBe thrownBy(status(controller().isAuthorisedForMtdIt(AgentCode(""), MtdItId("mtdItId"))(fakeRequest)))
     }
+
   }
 
-  private def anMtdVatEndpoint(fakeRequest: FakeRequest[_<:AnyContent]) = {
+  "POST isAuthorisedForMtdVat" should {
+    val fakeRequest = FakeRequest("POST", "/agent-access-control/mtd-vat-auth/agent//client/utr").withBody(Json.toJson(mtdAuthPostJson))
+
     "return 401 if the MtdVatAuthorisationService doesn't permit access" in {
 
       whenMtdVatAuthorisationServiceIsCalled thenReturn(Future successful false)
@@ -147,7 +162,9 @@ class AuthorisationControllerSpec extends UnitSpec with BeforeAndAfterEach with 
     }
   }
 
-  private def aPayeEndpoint(fakeRequest: FakeRequest[_<:AnyContent]) = {
+  "POST isAuthorisedForPaye" should {
+    val fakeRequest = FakeRequest("POST", "/agent-access-control/epaye-auth/agent//client/utr").withBody(Json.toJson(ePayeAuthPostJson))
+
     "return 200 when Paye is enabled" in {
       whenPayeAuthorisationServiceIsCalled thenReturn(Future successful true)
 
@@ -165,7 +182,8 @@ class AuthorisationControllerSpec extends UnitSpec with BeforeAndAfterEach with 
     }
   }
 
-  private def anAfiEndpoint(fakeRequest: FakeRequest[_<:AnyContent]) = {
+  "POST isAuthorisedForAfi" should {
+    val fakeRequest = FakeRequest("POST", "/agent-access-control/afi-auth/agent//client/utr").withBody(Json.toJson(mtdAuthPostJson))
 
     "return 200 if the AuthorisationService allows access" in {
 
@@ -192,62 +210,20 @@ class AuthorisationControllerSpec extends UnitSpec with BeforeAndAfterEach with 
 
       an[IllegalStateException] shouldBe thrownBy(status(controller().isAuthorisedForAfi(AgentCode(""), Nino("AA123456A"))(fakeRequest)))
     }
-
-  }
-
-
-  "GET isAuthorisedForSa" should {
-    behave like anSaEndpoint(FakeRequest("GET", "/agent-access-control/sa-auth/agent//client/utr"))
-  }
-
-  "POST isAuthorisedForSa" should {
-    behave like anSaEndpoint(FakeRequest("POST", "/agent-access-control/sa-auth/agent//client/utr").withJsonBody(Json.parse("{}")))
-  }
-
-  "GET isAuthorisedForMtdIt" should {
-    behave like anMdtitEndpoint(FakeRequest("GET", "/agent-access-control/mtd-it-auth/agent//client/utr"))
-  }
-
-  "POST isAuthorisedForMtdIt" should {
-    behave like anMdtitEndpoint(FakeRequest("POST", "/agent-access-control/mtd-it-auth/agent//client/utr").withJsonBody(Json.parse("{}")))
-  }
-
-  "GET isAuthorisedForMtdVat" should {
-    behave like anMtdVatEndpoint(FakeRequest("GET", "/agent-access-control/mtd-vat-auth/agent//client/utr"))
-  }
-
-  "POST isAuthorisedForMtdVat" should {
-    behave like anMtdVatEndpoint(FakeRequest("POST", "/agent-access-control/mtd-vat-auth/agent//client/utr").withJsonBody(Json.parse("{}")))
-  }
-
-  "GET isAuthorisedForPaye" should {
-    behave like aPayeEndpoint(FakeRequest("GET", "/agent-access-control/epaye-auth/agent//client/utr"))
-  }
-
-  "POST isAuthorisedForPaye" should {
-    behave like aPayeEndpoint(FakeRequest("POST", "/agent-access-control/epaye-auth/agent//client/utr").withJsonBody(Json.parse("{}")))
-  }
-
-  "GET isAuthorisedForAfi" should {
-    behave like anAfiEndpoint(FakeRequest("GET", "/agent-access-control/afi-auth/agent//client/utr"))
-  }
-
-  "POST isAuthorisedForAfi" should {
-    behave like anAfiEndpoint(FakeRequest("POST", "/agent-access-control/afi-auth/agent//client/utr").withJsonBody(Json.parse("{}")))
   }
 
   def whenAfiAuthorisationServiceIsCalled =
-    when(authorisationService.isAuthorisedForAfi(any[AgentCode], any[Nino])(any[ExecutionContext], any[HeaderCarrier], any[Request[Any]]))
+    when(authorisationService.isAuthorisedForAfi(any[AgentCode], any[Nino], any[AuthPostDetails])(any[ExecutionContext], any[HeaderCarrier], any[Request[Any]]))
 
   def whenAuthorisationServiceIsCalled =
-    when(authorisationService.isAuthorisedForSa(any[AgentCode], any[SaUtr])(any[ExecutionContext], any[HeaderCarrier], any[Request[Any]]))
+    when(authorisationService.isAuthorisedForSa(any[AgentCode], any[SaUtr], any[AuthPostDetails])(any[ExecutionContext], any[HeaderCarrier], any[Request[Any]]))
 
   def whenMtdItAuthorisationServiceIsCalled =
-    when(mtdItAuthorisationService.authoriseForMtdIt(any[AgentCode], any[MtdItId])(any[ExecutionContext], any[HeaderCarrier], any[Request[_]]))
+    when(mtdItAuthorisationService.authoriseForMtdIt(any[AgentCode], any[MtdItId], any[AuthPostDetails])(any[ExecutionContext], any[HeaderCarrier], any[Request[_]]))
 
   def whenMtdVatAuthorisationServiceIsCalled =
-    when(mtdVatAuthorisationService.authoriseForMtdVat(any[AgentCode], any[Vrn])(any[ExecutionContext], any[HeaderCarrier], any[Request[_]]))
+    when(mtdVatAuthorisationService.authoriseForMtdVat(any[AgentCode], any[Vrn], any[AuthPostDetails])(any[ExecutionContext], any[HeaderCarrier], any[Request[_]]))
 
   def whenPayeAuthorisationServiceIsCalled =
-    when(authorisationService.isAuthorisedForPaye(any[AgentCode], any[EmpRef])(any[ExecutionContext], any[HeaderCarrier], any[Request[_]]))
+    when(authorisationService.isAuthorisedForPaye(any[AgentCode], any[EmpRef], any[AuthPostDetails])(any[ExecutionContext], any[HeaderCarrier], any[Request[_]]))
 }

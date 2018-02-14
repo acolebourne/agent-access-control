@@ -18,6 +18,7 @@ package uk.gov.hmrc.agentaccesscontrol
 
 import java.util.Base64
 
+import play.api.libs.json.Json
 import uk.gov.hmrc.agentaccesscontrol.support.{Resource, WireMockWithOneServerPerTestISpec}
 import uk.gov.hmrc.domain.{AgentCode, SaAgentReference, SaUtr}
 import uk.gov.hmrc.http.HttpResponse
@@ -82,6 +83,6 @@ class WhitelistISpec extends WireMockWithOneServerPerTestISpec {
   }
 
   def authResponseFor(agentCode: AgentCode, clientSaUtr: SaUtr, trueClientIp: Option[String]): HttpResponse =
-    new Resource(s"/agent-access-control/sa-auth/agent/${agentCode.value}/client/${clientSaUtr.value}")(port).get(trueClientIp)
+    new Resource(s"/agent-access-control/sa-auth/agent/${agentCode.value}/client/${clientSaUtr.value}")(port).post(trueClientIp, Json.toJson(Map("ggCredentialId" -> "0000001232456789", "affinityGroup" -> "Agent", "saAgentReference" -> saAgentReference.value)))
 
 }

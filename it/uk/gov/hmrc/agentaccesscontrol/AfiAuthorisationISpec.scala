@@ -16,6 +16,7 @@ package uk.gov.hmrc.agentaccesscontrol
  * limitations under the License.
  */
 
+import play.api.libs.json.Json
 import uk.gov.hmrc.agentaccesscontrol.audit.AgentAccessControlEvent.AgentAccessControlDecision
 import uk.gov.hmrc.agentaccesscontrol.stubs.DataStreamStub
 import uk.gov.hmrc.agentaccesscontrol.support.{Resource, WireMockWithOneServerPerTestISpec}
@@ -29,40 +30,6 @@ class AfiAuthorisationISpec extends WireMockWithOneServerPerTestISpec {
   val clientId = Nino("AE123456C")
   val arn = Arn("TARN0000001")
 
-  "GET /agent-access-control/afi-auth/agent/:agentCode/client/:nino" should {
-    val method = "GET"
-    "respond with 200" when {
-      "the client has authorised the agent" in {
-        given()
-          .agentAdmin(agentCode).isLoggedIn()
-          .andHasHmrcAsAgentEnrolment(arn)
-          .andHasRelationship(arn, clientId)
-
-        authResponseFor(agentCode, clientId, method).status shouldBe 200
-
-        DataStreamStub.verifyAuditRequestSent(
-          AgentAccessControlDecision,
-          Map("path" -> s"/agent-access-control/afi-auth/agent/$agentCode/client/$clientId"))
-      }
-
-    }
-
-    "respond with 404" when {
-      "the client has not authorised the agent" in {
-        given()
-          .agentAdmin(agentCode).isLoggedIn()
-          .andHasHmrcAsAgentEnrolment(arn)
-          .andHasNoRelationship(arn, clientId)
-
-        authResponseFor(agentCode, clientId, method).status shouldBe 404
-
-        DataStreamStub.verifyAuditRequestSent(
-          AgentAccessControlDecision,
-          Map("path" -> s"/agent-access-control/afi-auth/agent/$agentCode/client/$clientId"))
-      }
-    }
-  }
-
   "POST /agent-access-control/afi-auth/agent/:agentCode/client/:nino" should {
     val method = "POST"
     "respond with 200" when {
@@ -72,7 +39,7 @@ class AfiAuthorisationISpec extends WireMockWithOneServerPerTestISpec {
           .andHasHmrcAsAgentEnrolment(arn)
           .andHasRelationship(arn, clientId)
 
-        authResponseFor(agentCode, clientId, method).status shouldBe 200
+        authResponseFor(agentCode, clientId).status shouldBe 200
 
         DataStreamStub.verifyAuditRequestSent(
           AgentAccessControlDecision,
@@ -88,7 +55,7 @@ class AfiAuthorisationISpec extends WireMockWithOneServerPerTestISpec {
           .andHasHmrcAsAgentEnrolment(arn)
           .andHasNoRelationship(arn, clientId)
 
-        authResponseFor(agentCode, clientId, method).status shouldBe 404
+        authResponseFor(agentCode, clientId).status shouldBe 404
 
         DataStreamStub.verifyAuditRequestSent(
           AgentAccessControlDecision,
@@ -97,11 +64,7 @@ class AfiAuthorisationISpec extends WireMockWithOneServerPerTestISpec {
     }
   }
 
-  def authResponseFor(agentCode: AgentCode, nino: Nino, method: String): HttpResponse = {
-    val resource = new Resource(s"/agent-access-control/afi-auth/agent/${agentCode.value}/client/${nino.value}")(port)
-    method match {
-      case "GET" => resource.get()
-      case "POST" => resource.post(body = """{"foo": "bar"}""")
-    }
+  def authResponseFor(agentCode: AgentCode, nino: Nino): HttpResponse = {
+    new Resource(s"/agent-access-control/afi-auth/agent/${agentCode.value}/client/${nino.value}")(port).post(body = Json.toJson(Map("arn" -> arn.value, "affinityGroup" -> "Agent")))
   }
 }

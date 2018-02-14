@@ -21,6 +21,7 @@ import javax.inject.{Inject, Singleton}
 import play.api.mvc.Request
 import uk.gov.hmrc.agentaccesscontrol.audit.{AgentAccessControlEvent, AuditService}
 import uk.gov.hmrc.agentaccesscontrol.connectors.{AfiRelationshipConnector, AuthConnector, AuthDetails}
+import uk.gov.hmrc.agentaccesscontrol.model.AuthPostDetails
 import uk.gov.hmrc.domain._
 
 import scala.concurrent.{ExecutionContext, Future}
@@ -37,28 +38,32 @@ class AuthorisationService @Inject()(desAuthorisationService: DesAuthorisationSe
   private val accessGranted = true
   private val accessDenied = false
 
-  def isAuthorisedForSa(agentCode: AgentCode, saUtr: SaUtr)
-                       (implicit ec: ExecutionContext, hc: HeaderCarrier, request: Request[Any]): Future[Boolean] =
-    authConnector.currentAuthDetails().flatMap {
-      case Some(agentAuthDetails@AuthDetails(Some(saAgentReference), _, ggCredentialId, _, _)) =>
+  def isAuthorisedForSa(agentCode: AgentCode, saUtr: SaUtr, postDetails: AuthPostDetails)
+                       (implicit ec: ExecutionContext, hc: HeaderCarrier, request: Request[Any]): Future[Boolean] = {
+    postDetails match {
+      case AuthPostDetails(Some(ggCredentialId), Some(saAgentReference), _, _) => {
         for {
           isAuthorisedInESP <- espAuthorisationService.isAuthorisedForSaInEnrolmentStoreProxy(ggCredentialId, saUtr)
-          maybeCesa <- checkCesaIfNecessary(isAuthorisedInESP, agentCode, saAgentReference, saUtr)
+          maybeCesa <- checkCesaIfNecessary(isAuthorisedInESP, agentCode, SaAgentReference(saAgentReference), saUtr)
         } yield {
           val result = isAuthorisedInESP && maybeCesa.get
 
           val cesaDescription = desResultDescription(maybeCesa)
-          auditDecision(agentCode, agentAuthDetails, "sa", saUtr, result, "cesaResult" -> cesaDescription, "enrolmentStoreResult" -> isAuthorisedInESP)
+          auditDecision(agentCode, postDetails, "sa", saUtr, result, "cesaResult" -> cesaDescription, "enrolmentStoreResult" -> isAuthorisedInESP)
 
-          if (result) authorised(s"Access allowed for agentCode=$agentCode ggCredential=${agentAuthDetails.ggCredentialId} client=$saUtr")
-          else notAuthorised(s"Access not allowed for agentCode=$agentCode ggCredential=${agentAuthDetails.ggCredentialId} client=$saUtr esp=$isAuthorisedInESP cesa=$cesaDescription")
+          if (result) authorised(s"Access allowed for agentCode=$agentCode ggCredential=${postDetails.ggCredentialId} client=$saUtr")
+          else notAuthorised(s"Access not allowed for agentCode=$agentCode ggCredential=${postDetails.ggCredentialId} client=$saUtr esp=$isAuthorisedInESP cesa=$cesaDescription")
         }
-      case Some(agentAuthDetails@AuthDetails(None, _, _, _, _)) =>
-        auditDecision(agentCode, agentAuthDetails, "sa", saUtr, result = false)
-        Future successful notAuthorised(s"No 6 digit agent reference found for agent $agentCode")
-      case None =>
+      }
+      case AuthPostDetails(None, None, None, _) => {
         Future successful notAuthorised("No user is logged in")
+      }
+      case _ => {
+        auditDecision(agentCode, postDetails, "sa", saUtr, result = false)
+        Future successful notAuthorised(s"No 6 digit agent reference found for agent $agentCode")
+      }
     }
+  }
 
   private def checkCesaIfNecessary(isAuthorisedInESP: Boolean, agentCode: AgentCode, saAgentReference: SaAgentReference, saUtr: SaUtr)
                                   (implicit ec: ExecutionContext, hc: HeaderCarrier): Future[Option[Boolean]] =
@@ -66,10 +71,10 @@ class AuthorisationService @Inject()(desAuthorisationService: DesAuthorisationSe
     else Future successful None
 
 
-  def isAuthorisedForPaye(agentCode: AgentCode, empRef: EmpRef)
-                         (implicit ec: ExecutionContext, hc: HeaderCarrier, request: Request[Any]): Future[Boolean] =
-    authConnector.currentAuthDetails().flatMap {
-      case Some(agentAuthDetails@AuthDetails(_, _, ggCredentialId, _, _)) =>
+  def isAuthorisedForPaye(agentCode: AgentCode, empRef: EmpRef, authPostDetails: AuthPostDetails)
+                         (implicit ec: ExecutionContext, hc: HeaderCarrier, request: Request[Any]): Future[Boolean] = {
+    authPostDetails match {
+      case AuthPostDetails(Some(ggCredentialId), _, _, _) => {
         for {
           isAuthorisedInESP <- espAuthorisationService.isAuthorisedForPayeInEnrolmentStoreProxy(ggCredentialId, empRef)
           maybeEbs <- checkEbsIfNecessary(isAuthorisedInESP, agentCode, empRef)
@@ -77,13 +82,16 @@ class AuthorisationService @Inject()(desAuthorisationService: DesAuthorisationSe
           val result = isAuthorisedInESP && maybeEbs.get
 
           val ebsDescription = desResultDescription(maybeEbs)
-          auditDecision(agentCode, agentAuthDetails, "paye", empRef, result, "ebsResult" -> ebsDescription, "enrolmentStoreResult" -> isAuthorisedInESP)
+          auditDecision(agentCode, authPostDetails, "paye", empRef, result, "ebsResult" -> ebsDescription, "enrolmentStoreResult" -> isAuthorisedInESP)
 
-          if (result) authorised(s"Access allowed for agentCode=$agentCode ggCredential=${agentAuthDetails.ggCredentialId} client=$empRef")
-          else notAuthorised(s"Access not allowed for agentCode=$agentCode ggCredential=${agentAuthDetails.ggCredentialId} client=$empRef esp=$isAuthorisedInESP ebs=$ebsDescription")
+          if (result) authorised(s"Access allowed for agentCode=$agentCode ggCredential=${authPostDetails.ggCredentialId} client=$empRef")
+          else notAuthorised(s"Access not allowed for agentCode=$agentCode ggCredential=${authPostDetails.ggCredentialId} client=$empRef esp=$isAuthorisedInESP ebs=$ebsDescription")
         }
-      case None => Future successful notAuthorised("No user is logged in")
+      }
+      case AuthPostDetails(None, None, None, _) => Future successful notAuthorised("No user is logged in")
+      case _ => Future successful notAuthorised("ggCredentialId is not provided") //FIXME re-visit error message
     }
+  }
 
   private def checkEbsIfNecessary(isAuthorisedInESP: Boolean, agentCode: AgentCode, empRef: EmpRef)
                                  (implicit ec: ExecutionContext, hc: HeaderCarrier): Future[Option[Boolean]] =
@@ -94,33 +102,36 @@ class AuthorisationService @Inject()(desAuthorisationService: DesAuthorisationSe
     maybeEbs.getOrElse("notChecked")
   }
 
-  def isAuthorisedForAfi(agentCode: AgentCode, nino: Nino)
+  def isAuthorisedForAfi(agentCode: AgentCode, nino: Nino, authPostDetails: AuthPostDetails)
                         (implicit ec: ExecutionContext, hc: HeaderCarrier, request: Request[Any]): Future[Boolean] = {
-    authConnector.currentAuthDetails().flatMap {
-      case Some(authDetails@AuthDetails(_, Some(arn), _, _, _)) =>
-        val arnValue = arn.value
-        afiRelationshipConnector.hasRelationship(arnValue, nino.value) map { hasRelationship =>
+    authPostDetails match {
+      case AuthPostDetails(_,_, Some(arn), _) => {
+        afiRelationshipConnector.hasRelationship(arn, nino.value) map { hasRelationship =>
           if (hasRelationship) {
-            auditDecision(agentCode, authDetails, "afi", nino, accessGranted, "" -> "")
+            auditDecision(agentCode, authPostDetails, "afi", nino, accessGranted, "" -> "")
             found("Relationship Found")
           } else {
-            auditDecision(agentCode, authDetails, "afi", nino, accessDenied, "" -> "")
+            auditDecision(agentCode, authPostDetails, "afi", nino, accessDenied, "" -> "")
             notFound("No relationship found")
           }
         }
-      case _ => Future successful notFound("Error retrieving arn")
+      }
+      case AuthPostDetails(None, None, None, _) => Future successful notFound("Error retrieving arn")
+      case _ => Future successful notAuthorised("arn is not provided") //FIXME re-visit error message
+
     }
   }
 
 
   private def auditDecision(
-                             agentCode: AgentCode, agentAuthDetails: AuthDetails, regime: String, taxIdentifier: TaxIdentifier,
+                             agentCode: AgentCode, agentAuthDetails: AuthPostDetails, regime: String, taxIdentifier: TaxIdentifier,
                              result: Boolean, extraDetails: (String, Any)*)
                            (implicit hc: HeaderCarrier, request: Request[Any]): Future[Unit] = {
     val optionalDetails = Seq(
       agentAuthDetails.saAgentReference.map("saAgentReference" -> _),
       agentAuthDetails.affinityGroup.map("affinityGroup" -> _),
-      agentAuthDetails.agentUserRole.map("agentUserRole" -> _)).flatten
+      Some("admin").map("agentUserRole" -> _) //TODO [APB-2030][HO,AK] hardcoded for now until we are able to get value from AUTH. (collaborating with team auth)
+    ).flatten
 
     auditService.auditEvent(
       AgentAccessControlEvent.AgentAccessControlDecision,
@@ -128,7 +139,7 @@ class AuthorisationService @Inject()(desAuthorisationService: DesAuthorisationSe
       agentCode,
       regime,
       taxIdentifier,
-      Seq("credId" -> agentAuthDetails.ggCredentialId,
+      Seq("credId" -> agentAuthDetails.ggCredentialId.getOrElse(""),
         "accessGranted" -> result)
         ++ extraDetails
         ++ optionalDetails)

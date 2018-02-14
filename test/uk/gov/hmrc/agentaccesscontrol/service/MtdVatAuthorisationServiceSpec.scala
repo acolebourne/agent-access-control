@@ -39,6 +39,7 @@ import uk.gov.hmrc.agentaccesscontrol.audit.AgentAccessControlEvent.AgentAccessC
 import uk.gov.hmrc.agentaccesscontrol.audit.AuditService
 import uk.gov.hmrc.agentaccesscontrol.connectors.mtd.RelationshipsConnector
 import uk.gov.hmrc.agentaccesscontrol.connectors.{AuthConnector, AuthDetails}
+import uk.gov.hmrc.agentaccesscontrol.model.AuthPostDetails
 import uk.gov.hmrc.agentaccesscontrol.support.ResettingMockitoSugar
 import uk.gov.hmrc.agentmtdidentifiers.model.{Arn, MtdItId, Vrn}
 import uk.gov.hmrc.domain.AgentCode
@@ -59,6 +60,9 @@ class MtdVatAuthorisationServiceSpec extends UnitSpec with ResettingMockitoSugar
   val agentCode = AgentCode("agentCode")
   val arn = Arn("arn")
   val vrn = Vrn("vrn")
+  val validAuthDetailsForVat = AuthPostDetails(Some("ggId"), None, Some(arn.value), Some("Agent"))
+  val invalidAuthDetailsForVat = AuthPostDetails(Some("ggId"), None, None, Some("Agent"))
+
   implicit val hc = HeaderCarrier()
   implicit val fakeRequest = FakeRequest("GET", "/agent-access-control/mtd-vat-auth/agent/arn/client/vrn")
 
@@ -67,15 +71,15 @@ class MtdVatAuthorisationServiceSpec extends UnitSpec with ResettingMockitoSugar
       asAgentIsLoggedIn()
       whenRelationshipsConnectorIsCalled thenReturn true
 
-      val result = await(service.authoriseForMtdVat(agentCode, vrn))
+      val result = await(service.authoriseForMtdVat(agentCode, vrn, validAuthDetailsForVat))
 
       result shouldBe true
     }
 
     "deny access for a non-mtd agent" in {
-      agentWithoutHmrcAsAgentEnrolmentIsLoggedIn()
+//      agentWithoutHmrcAsAgentEnrolmentIsLoggedIn()
 
-      val result = await(service.authoriseForMtdVat(agentCode, vrn))
+      val result = await(service.authoriseForMtdVat(agentCode, vrn, invalidAuthDetailsForVat))
 
       result shouldBe false
       verify(relationshipsConnector, never).relationshipExists(any[Arn], any[MtdItId])(any[ExecutionContext], any[HeaderCarrier])
@@ -85,7 +89,7 @@ class MtdVatAuthorisationServiceSpec extends UnitSpec with ResettingMockitoSugar
       asAgentIsLoggedIn()
       whenRelationshipsConnectorIsCalled thenReturn false
 
-      val result = await(service.authoriseForMtdVat(agentCode, vrn))
+      val result = await(service.authoriseForMtdVat(agentCode, vrn, validAuthDetailsForVat))
 
       result shouldBe false
     }
@@ -95,7 +99,7 @@ class MtdVatAuthorisationServiceSpec extends UnitSpec with ResettingMockitoSugar
         asAgentIsLoggedIn()
         whenRelationshipsConnectorIsCalled thenReturn true
 
-        await(service.authoriseForMtdVat(agentCode, vrn))
+        await(service.authoriseForMtdVat(agentCode, vrn, validAuthDetailsForVat))
 
         verify(auditService)
           .auditEvent(AgentAccessControlDecision, "agent access decision", agentCode, "mtd-vat", vrn, Seq("credId" -> "ggId", "accessGranted" -> true, "arn" -> arn.value))(hc, fakeRequest)
@@ -105,16 +109,16 @@ class MtdVatAuthorisationServiceSpec extends UnitSpec with ResettingMockitoSugar
         asAgentIsLoggedIn()
         whenRelationshipsConnectorIsCalled thenReturn false
 
-        await(service.authoriseForMtdVat(agentCode, vrn))
+        await(service.authoriseForMtdVat(agentCode, vrn, validAuthDetailsForVat))
 
         verify(auditService)
           .auditEvent(AgentAccessControlDecision, "agent access decision", agentCode, "mtd-vat", vrn, Seq("credId" -> "ggId", "accessGranted" -> false, "arn" -> arn.value))(hc, fakeRequest)
       }
 
       "no HMRC-AS-AGENT enrolment exists" in {
-        agentWithoutHmrcAsAgentEnrolmentIsLoggedIn()
+//        agentWithoutHmrcAsAgentEnrolmentIsLoggedIn()
 
-        await(service.authoriseForMtdVat(agentCode, vrn))
+        await(service.authoriseForMtdVat(agentCode, vrn, invalidAuthDetailsForVat))
 
         verify(auditService)
           .auditEvent(AgentAccessControlDecision, "agent access decision", agentCode, "mtd-vat", vrn, Seq("credId" -> "ggId", "accessGranted" -> false))(hc, fakeRequest)
@@ -128,6 +132,6 @@ class MtdVatAuthorisationServiceSpec extends UnitSpec with ResettingMockitoSugar
   def asAgentIsLoggedIn() =
     when(authConnector.currentAuthDetails()).thenReturn(Some(AuthDetails(None, Some(arn), "ggId", affinityGroup = Some("Agent"), agentUserRole = Some("admin"))))
 
-  def agentWithoutHmrcAsAgentEnrolmentIsLoggedIn() =
-    when(authConnector.currentAuthDetails()).thenReturn(Some(AuthDetails(None, None, "ggId", affinityGroup = Some("Agent"), agentUserRole = Some("admin"))))
+//  def agentWithoutHmrcAsAgentEnrolmentIsLoggedIn() =
+//    when(authConnector.currentAuthDetails()).thenReturn(Some(AuthDetails(None, None, "ggId", affinityGroup = Some("Agent"), agentUserRole = Some("admin"))))
 }

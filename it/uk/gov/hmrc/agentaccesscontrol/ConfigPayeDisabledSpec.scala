@@ -1,5 +1,6 @@
 package uk.gov.hmrc.agentaccesscontrol
 
+import play.api.libs.json.Json
 import play.utils.UriEncoding.encodePathSegment
 import uk.gov.hmrc.agentaccesscontrol.support.{Resource, WireMockWithOneServerPerTestISpec}
 import uk.gov.hmrc.domain.{AgentCode, EmpRef}
@@ -29,5 +30,5 @@ class ConfigPayeDisabledSpec extends WireMockWithOneServerPerTestISpec {
   }
 
   def authResponseFor(agentCode: AgentCode, empRef: EmpRef): HttpResponse =
-    new Resource(s"/agent-access-control/epaye-auth/agent/${agentCode.value}/client/${encodePathSegment(empRef.value, "UTF-8")}")(port).get()
+    new Resource(s"/agent-access-control/epaye-auth/agent/${agentCode.value}/client/${encodePathSegment(empRef.value, "UTF-8")}")(port).post(body = Json.toJson(Map("ggCredentialId" -> "0000001232456789", "affinityGroup" -> "Agent")))
 }
